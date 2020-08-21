@@ -1,0 +1,68 @@
+on: [push]
+
+name: CI/CD Workflow
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: FranzDiebold/github-env-vars-action@v1.0.0
+      - name: GitHub Environment Variables Action
+        run: |
+          echo "GITHUB_REF_NAME=$GITHUB_REF_NAME"
+
+      - name: 'Update Teams'
+        uses: toko-bifrost/ms-teams-deploy-card@master
+        with:
+          github-token: ${{ github.token }}
+          webhook-uri: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
+          environment: ${{ env.GITHUB_REF_NAME }}
+          timezone: America/Chicago
+          card-layout-exit: complete
+
+      - name: 'Checkout GitHub Action'
+        uses: actions/checkout@master
+        
+      - name: 'Login via Azure CLI'
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+      - name: 'Build and push image to ACR'
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.REGISTRY_LOGIN_SERVER }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - run: |
+          docker build -f Dockerfile-${{ env.GITHUB_REF_NAME }} . -t ${{ secrets.REGISTRY_LOGIN_SERVER }}/auth0-hello-world:${{ github.sha }}
+          docker push ${{ secrets.REGISTRY_LOGIN_SERVER }}/auth0-hello-world:${{ github.sha }}
+
+      - name: 'Set context for AKS'
+        uses: Azure/aks-set-context@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          cluster-name: ${{ secrets.CLUSTER_NAME }}
+          resource-group: ${{ secrets.RESOURCE_GROUP }}
+
+      - name: 'Create AKS Secret'
+        uses: Azure/k8s-create-secret@v1
+        with:
+          container-registry-url: ${{ secrets.REGISTRY_LOGIN_SERVER }}
+          container-registry-username: ${{ secrets.REGISTRY_USERNAME }}
+          container-registry-password: ${{ secrets.REGISTRY_PASSWORD }}
+          secret-name: c1-k8s-secret
+    
+      - name: 'Deploy to Kubernetes'
+        uses: Azure/k8s-deploy@v1
+        with:
+          namespace: ${{ env.GITHUB_REF_NAME }}
+          manifests: |
+            manifests/deployment.yml
+            manifests/service.yml
+            manifests/ingress-${{ env.GITHUB_REF_NAME }}.yml
+          images: |
+            ${{ secrets.REGISTRY_LOGIN_SERVER }}/auth0-hello-world:${{ github.sha }}
+          imagepullsecrets: |
+            c1-k8s-secret
+            - uses: actions/checkout@v2

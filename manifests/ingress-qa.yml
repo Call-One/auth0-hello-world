@@ -1,0 +1,26 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+  name: auth0-hello-world-ingress
+  namespace: qa
+spec:
+  rules:
+  - host: helloworld-qa.callone.com
+    http:
+      paths:
+      - backend:
+          serviceName: auth0-hello-world
+          servicePort: 80
+        path: /(.*)
+  tls:
+  - hosts:
+    - helloworld-qa.callone.com
+    secretName: auth0-hello-world-secret
+status:
+  loadBalancer:
+    ingress:
+      []
