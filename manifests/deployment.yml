@@ -34,3 +34,75 @@ spec:
       schedulerName: default-scheduler
       securityContext: {}
       terminationGracePeriodSeconds: 30
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    k8s-app: auth0-hello-world-proxy
+  name: auth0-hello-world-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: auth0-hello-world-proxy
+  template:
+    metadata:
+      labels:
+        k8s-app: auth0-hello-world-proxy
+    spec:
+      containers:
+      - args:
+        - --cookie-expire=24h0m0s
+        - --cookie-refresh=0h60m0s
+        - --email-domain=*
+        - --http-address=0.0.0.0:4180
+        - --provider=oidc
+        - --set-authorization-header=true
+        - --skip-provider-button=true
+        - --oidc-issuer-url=https://login-dev.callone.com/
+        - --login-url=https://login-dev.callone.com/authorize
+        - --redeem-url=https://login-dev.callone.com/oauth/token
+        - --validate-url=https://login-dev.callone.com/userinfo
+        - --upstream=file:///dev/null
+        env:
+        - name: OAUTH2_PROXY_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: auth0-hello-world-proxy-secret
+              key: client-id
+        - name: OAUTH2_PROXY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: auth0-hello-world-proxy-secret
+              key: client-secret
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: auth0-hello-world-proxy-secret
+              key: cookie-secret
+        image: quay.io/oauth2-proxy/oauth2-proxy:latest
+        imagePullPolicy: Always
+        name: auth0-hello-world-proxy
+        ports:
+        - containerPort: 4180
+          protocol: TCP
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    k8s-app: auth0-hello-world-proxy
+  name: auth0-hello-world-proxy
+spec:
+  ports:
+  - name: http
+    port: 4180
+    protocol: TCP
+    targetPort: 4180
+  selector:
+    k8s-app: auth0-hello-world-proxy
